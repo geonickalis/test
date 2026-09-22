@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Fullscreen Video Playlist</title>
+    <title>Seamless Video Playlist</title>
 
     <style>
-        html, body {
+        html,
+        body {
             margin: 0;
             padding: 0;
             width: 100%;
@@ -16,28 +17,49 @@
             overflow: hidden;
         }
 
-        #videoPlayer {
+        video {
+            position: fixed;
+            inset: 0;
+
             width: 100vw;
             height: 100vh;
+
             object-fit: cover;
-            display: block;
+
             background: #000;
+        }
+
+        /*
+         * Both videos occupy exactly the same space.
+         * Only the active one is visible.
+         */
+        .active {
+            z-index: 2;
+        }
+
+        .inactive {
+            z-index: 1;
         }
 
         #startButton {
             position: fixed;
-            z-index: 10;
+            z-index: 100;
+
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
 
             padding: 20px 35px;
+
             font-size: 20px;
+
             border: none;
             border-radius: 10px;
-            cursor: pointer;
+
             background: white;
             color: black;
+
+            cursor: pointer;
         }
     </style>
 </head>
@@ -45,17 +67,28 @@
 <body>
 
     <video
-        id="videoPlayer"
-        autoplay
+        id="videoA"
         muted
         playsinline
         preload="auto">
     </video>
 
-    
+    <video
+        id="videoB"
+        muted
+        playsinline
+        preload="auto">
+    </video>
+
+    <button id="startButton">
+        Start Videos
+    </button>
+
+
     <script>
+
         // ==========================================
-        // VIDEO PLAYLIST
+        // PLAYLIST
         // ==========================================
 
         const videos = [
@@ -65,64 +98,291 @@
             "videos/vid4.mp4"
         ];
 
+
         // ==========================================
-        // PLAYER
+        // PLAYERS
         // ==========================================
 
-        const videoPlayer = document.getElementById("videoPlayer");
+        const videoA = document.getElementById("videoA");
+        const videoB = document.getElementById("videoB");
+        const startButton = document.getElementById("startButton");
 
-        let currentVideo = 0;
+        let active = videoA;
+        let standby = videoB;
+
+        let currentIndex = 0;
 
 
-        // Load a video from the playlist
-        function loadVideo(index) {
-            currentVideo = index;
+        // ==========================================
+        // WAIT UNTIL VIDEO IS READY
+        // ==========================================
 
-            videoPlayer.src = videos[currentVideo];
-            videoPlayer.load();
+        function waitUntilReady(video) {
 
-            videoPlayer.play().catch(error => {
-                console.log("Autoplay was blocked:", error);
-                startButton.style.display = "block";
+            return new Promise((resolve, reject) => {
+
+                // Already sufficiently loaded
+                if (video.readyState >= 3) {
+                    resolve();
+                    return;
+                }
+
+                function ready() {
+                    cleanup();
+                    resolve();
+                }
+
+                function error() {
+                    cleanup();
+                    reject(new Error("Video failed to load"));
+                }
+
+                function cleanup() {
+                    video.removeEventListener("canplay", ready);
+                    video.removeEventListener("error", error);
+                }
+
+                video.addEventListener("canplay", ready);
+                video.addEventListener("error", error);
             });
         }
 
 
         // ==========================================
-        // NEXT VIDEO
+        // LOAD A VIDEO
         // ==========================================
 
-        function nextVideo() {
+        function loadVideo(player, index) {
 
-            currentVideo++;
+            player.src = videos[index];
+            player.load();
 
-            // Go back to the beginning
-            // after the last video
-            if (currentVideo >= videos.length) {
-                currentVideo = 0;
-            }
-
-            loadVideo(currentVideo);
+            return waitUntilReady(player);
         }
 
 
         // ==========================================
-        // WHEN VIDEO ENDS
+        // PREPARE NEXT VIDEO
         // ==========================================
 
-        videoPlayer.addEventListener("ended", () => {
-            nextVideo();
-        });
+        async function prepareNext() {
+
+            const nextIndex =
+                (currentIndex + 1) % videos.length;
+
+            try {
+
+                await loadVideo(standby, nextIndex);
+
+                console.log(
+                    "Next video ready:",
+                    videos[nextIndex]
+                );
+
+                return true;
+
+            } catch (error) {
+
+                console.error(
+                    "Could not load:",
+                    videos[nextIndex],
+                    error
+                );
+
+                return false;
+            }
+        }
 
 
         // ==========================================
-        // INITIAL VIDEO
+        // PLAY NEXT VIDEO
         // ==========================================
 
-        loadVideo(0);
+        async function playNext() {
+
+            const nextIndex =
+                (currentIndex + 1) % videos.length;
+
+
+            // Make absolutely sure the next video
+            // is ready before changing the screen.
+
+            try {
+                await waitUntilReady(standby);
+            } catch (error) {
+
+                console.error("Next video not ready");
+
+                // Try loading it again
+                await loadVideo(standby, nextIndex);
+            }
+
+
+            // Start the next video while it is still
+            // underneath the currently visible video.
+
+            try {
+                await standby.play();
+            } catch (error) {
+
+                console.error(
+                    "Could not play next video:",
+                    error
+                );
+
+                // Try again after a short delay
+                setTimeout(playNext, 100);
+                return;
+            }
+
+
+            // ======================================
+            // SWAP
+            // ======================================
+
+            const oldActive = active;
+
+            active = standby;
+            standby = oldActive;
+
+            currentIndex = nextIndex;
+
+
+            // New video becomes visible
+            active.classList.add("active");
+            active.classList.remove("inactive");
+
+            standby.classList.add("inactive");
+            standby.classList.remove("active");
+
+
+            // Stop the old video
+            standby.pause();
+            standby.currentTime = 0;
+
+
+            // ======================================
+            // PRELOAD VIDEO AFTER NEXT
+            // ======================================
+
+            const afterNext =
+                (currentIndex + 1) % videos.length;
+
+            loadVideo(standby, afterNext)
+                .then(() => {
+
+                    console.log(
+                        "Preloaded:",
+                        videos[afterNext]
+                    );
+
+                })
+                .catch(error => {
+
+                    console.error(
+                        "Preload failed:",
+                        error
+                    );
+
+                });
+
+
+            // Wait for this video to finish
+            active.onended = playNext;
+        }
+
+
+        // ==========================================
+        // START
+        // ==========================================
+
+        async function start() {
+
+            startButton.style.display = "none";
+
+            try {
+
+                // Make sure first video is ready
+                await waitUntilReady(active);
+
+                // Start first video
+                await active.play();
+
+
+                // Prepare second video immediately
+                prepareNext();
+
+
+                // Fullscreen
+                if (document.documentElement.requestFullscreen) {
+
+                    try {
+                        await document.documentElement.requestFullscreen();
+                    } catch (e) {
+                        console.log(
+                            "Fullscreen request was blocked"
+                        );
+                    }
+                }
+
+
+                // First video finished
+                active.onended = playNext;
+
+            } catch (error) {
+
+                console.error(error);
+
+                startButton.style.display = "block";
+            }
+        }
+
+
+        // ==========================================
+        // INITIALIZE
+        // ==========================================
+
+        videoA.classList.add("active");
+        videoB.classList.add("inactive");
+
+
+        // Load first video
+        loadVideo(videoA, 0)
+            .then(() => {
+
+                console.log("First video ready");
+
+                // Try autoplay
+                return videoA.play();
+
+            })
+            .then(() => {
+
+                startButton.style.display = "none";
+
+                // Start preloading video 2
+                prepareNext();
+
+                // Set up loop
+                videoA.onended = playNext;
+
+            })
+            .catch(() => {
+
+                // Autoplay blocked.
+                // User needs to click.
+
+                startButton.style.display = "block";
+            });
+
+
+        // ==========================================
+        // START BUTTON
+        // ==========================================
+
+        startButton.addEventListener("click", start);
 
     </script>
 
 </body>
 </html>
-
