@@ -1,0 +1,128 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Fullscreen Video Playlist</title>
+
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #videoPlayer {
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            display: block;
+            background: #000;
+        }
+
+        #startButton {
+            position: fixed;
+            z-index: 10;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+
+            padding: 20px 35px;
+            font-size: 20px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            background: white;
+            color: black;
+        }
+    </style>
+</head>
+
+<body>
+
+    <video
+        id="videoPlayer"
+        autoplay
+        muted
+        playsinline
+        preload="auto">
+    </video>
+
+    
+    <script>
+        // ==========================================
+        // VIDEO PLAYLIST
+        // ==========================================
+
+        const videos = [
+            "videos/vid1.mp4",
+            "videos/vid2.mp4",
+            "videos/vid3.mp4",
+            "videos/vid4.mp4"
+        ];
+
+        // ==========================================
+        // PLAYER
+        // ==========================================
+
+        const videoPlayer = document.getElementById("videoPlayer");
+
+        let currentVideo = 0;
+
+
+        // Load a video from the playlist
+        function loadVideo(index) {
+            currentVideo = index;
+
+            videoPlayer.src = videos[currentVideo];
+            videoPlayer.load();
+
+            videoPlayer.play().catch(error => {
+                console.log("Autoplay was blocked:", error);
+                startButton.style.display = "block";
+            });
+        }
+
+
+        // ==========================================
+        // NEXT VIDEO
+        // ==========================================
+
+        function nextVideo() {
+
+            currentVideo++;
+
+            // Go back to the beginning
+            // after the last video
+            if (currentVideo >= videos.length) {
+                currentVideo = 0;
+            }
+
+            loadVideo(currentVideo);
+        }
+
+
+        // ==========================================
+        // WHEN VIDEO ENDS
+        // ==========================================
+
+        videoPlayer.addEventListener("ended", () => {
+            nextVideo();
+        });
+
+
+        // ==========================================
+        // INITIAL VIDEO
+        // ==========================================
+
+        loadVideo(0);
+
+    </script>
+
+</body>
+</html>
+
